@@ -27,6 +27,7 @@ import (
 
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/api/v1"
+	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/util/errors"
 	"k8s.io/kubernetes/pkg/util/workqueue"
@@ -89,7 +90,7 @@ type genericScheduler struct {
 // Schedule tries to schedule the given pod to one of node in the node list.
 // If it succeeds, it will return the name of the node.
 // If it fails, it will return a Fiterror error with reasons.
-func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister) (string, error) {
+func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister, pvcLister algorithm.PVCLister) (string, error) {
 	var trace *util.Trace
 	if pod != nil {
 		trace = util.NewTrace(fmt.Sprintf("Scheduling %s/%s", pod.Namespace, pod.Name))
@@ -105,6 +106,11 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 	if len(nodes) == 0 {
 		return "", ErrNoNodesAvailable
 	}
+	
+	pvcs, err := pvcLister.List(labels.Everything())
+	if err != nil {
+		return "", err
+	}
 
 	// Used for all fit and priority funcs.
 	err = g.cache.UpdateNodeNameToInfoMap(g.cachedNodeInfoMap)
@@ -115,7 +121,7 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 	// TODO(harryz) Check if equivalenceCache is enabled and call scheduleWithEquivalenceClass here
 
 	trace.Step("Computing predicates")
-	filteredNodes, failedPredicateMap, err := findNodesThatFit(pod, g.cachedNodeInfoMap, nodes, g.predicates, g.extenders, g.predicateMetaProducer)
+	filteredNodes, failedPredicateMap, err := findNodesThatFit(pod, g.cachedNodeInfoMap, nodes, pvcs, g.predicates, g.extenders, g.predicateMetaProducer)
 	if err != nil {
 		return "", err
 	}
@@ -163,12 +169,30 @@ func findNodesThatFit(
 	pod *v1.Pod,
 	nodeNameToInfo map[string]*schedulercache.NodeInfo,
 	nodes []*v1.Node,
+	pvcs []*v1.PersistentVolumeClaim,
 	predicateFuncs map[string]algorithm.FitPredicate,
 	extenders []algorithm.SchedulerExtender,
 	metadataProducer algorithm.MetadataProducer,
 ) ([]*v1.Node, FailedPredicateMap, error) {
 	var filtered []*v1.Node
 	failedPredicateMap := FailedPredicateMap{}
+	
+	rwoConflict := false
+	rwoPVCs := []string{}
+	
+	for _, v := range pod.Spec.Volumes {
+		if v.VolumeSource.PersistentVolumeClaim != nil {
+			for _, pvc := range pvcs {
+				if pvc.Namespace == pod.Namespace && pvc.Name == v.VolumeSource.PersistentVolumeClaim.ClaimName {
+					if len(pvc.Spec.AccessModes) == 1 && pvc.Spec.AccessModes[0] == v1.ReadWriteOnce {
+						rwoPVCs = append(rwoPVCs, pvc.Namespace + "/" + pvc.Name)
+					}
+					
+					break
+				}
+			}
+		}
+	}
 
 	if len(predicateFuncs) == 0 {
 		filtered = nodes
@@ -198,11 +222,36 @@ func findNodesThatFit(
 				failedPredicateMap[nodeName] = failedPredicates
 				predicateResultLock.Unlock()
 			}
+			
+			nodeInfo := nodeNameToInfo[nodeName]
+			pods := nodeInfo.Pods()
+			
+			for _, pod := range pods {
+				glog.V(1).Info("XINGDONGDONG1: %s", pod.Name)
+				for _, v := range pod.Spec.Volumes {
+					if v.VolumeSource.PersistentVolumeClaim != nil {
+						key := pod.Namespace + "/" + v.VolumeSource.PersistentVolumeClaim.ClaimName
+						glog.V(1).Info("XINGDONGDONG2: %s", key)
+						for _, k := range rwoPVCs {
+							glog.V(1).Info("XINGDONGDONG3: %s", k)
+							if k == key {
+								rwoConflict = true
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 		workqueue.Parallelize(16, len(nodes), checkNode)
 		filtered = filtered[:filteredLen]
 		if len(errs) > 0 {
 			return []*v1.Node{}, FailedPredicateMap{}, errors.NewAggregate(errs)
+		}
+		
+		if rwoConflict {
+			glog.V(1).Info("XINGDONGDONG")
+			return []*v1.Node{}, FailedPredicateMap{}, nil
 		}
 	}
 

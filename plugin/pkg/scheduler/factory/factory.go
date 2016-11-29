@@ -164,6 +164,14 @@ func NewConfigFactory(client clientset.Interface, schedulerName string, hardPodA
 	)
 
 	// TODO(harryz) need to fill all the handlers here and below for equivalence cache
+	c.PVCLister.Indexer, c.pvcPopulator = cache.NewIndexerInformer(
+		c.createPersistentVolumeClaimLW(),
+		&v1.PersistentVolumeClaim{},
+		0,
+		cache.ResourceEventHandlerFuncs{},
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+	
 	c.PVLister.Store, c.pvPopulator = cache.NewInformer(
 		c.createPersistentVolumeLW(),
 		&v1.PersistentVolume{},
@@ -384,6 +392,7 @@ func (f *ConfigFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 		SchedulerCache: f.schedulerCache,
 		// The scheduler only needs to consider schedulable nodes.
 		NodeLister:          f.NodeLister.NodeCondition(getNodeConditionPredicate()),
+		PVCLister:           f.PVCLister,
 		Algorithm:           algo,
 		Binder:              &binder{f.Client},
 		PodConditionUpdater: &podConditionUpdater{f.Client},

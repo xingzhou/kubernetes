@@ -49,6 +49,7 @@ type Config struct {
 	// by NodeLister and Algorithm.
 	SchedulerCache schedulercache.Cache
 	NodeLister     algorithm.NodeLister
+	PVCLister      algorithm.PVCLister
 	Algorithm      algorithm.ScheduleAlgorithm
 	Binder         Binder
 	// PodConditionUpdater is used only in case of scheduling errors. If we succeed
@@ -92,7 +93,7 @@ func (s *Scheduler) scheduleOne() {
 
 	glog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
 	start := time.Now()
-	dest, err := s.config.Algorithm.Schedule(pod, s.config.NodeLister)
+	dest, err := s.config.Algorithm.Schedule(pod, s.config.NodeLister, s.config.PVCLister)
 	if err != nil {
 		glog.V(1).Infof("Failed to schedule pod: %v/%v", pod.Namespace, pod.Name)
 		s.config.Error(pod, err)

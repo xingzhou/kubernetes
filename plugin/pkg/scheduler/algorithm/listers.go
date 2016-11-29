@@ -47,6 +47,10 @@ type PodLister interface {
 	List(labels.Selector) ([]*v1.Pod, error)
 }
 
+type PVCLister interface {
+	List(labels.Selector) ([]*v1.PersistentVolumeClaim, error)
+}
+
 // FakePodLister implements PodLister on an []v1.Pods for test purposes.
 type FakePodLister []*v1.Pod
 

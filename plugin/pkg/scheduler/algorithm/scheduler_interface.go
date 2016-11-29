@@ -39,5 +39,5 @@ type SchedulerExtender interface {
 // ScheduleAlgorithm is an interface implemented by things that know how to schedule pods
 // onto machines.
 type ScheduleAlgorithm interface {
-	Schedule(*v1.Pod, NodeLister) (selectedMachine string, err error)
+	Schedule(*v1.Pod, NodeLister, PVCLister) (selectedMachine string, err error)
 }

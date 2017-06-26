@@ -592,6 +592,7 @@ func Convert_api_Pod_To_v1_Pod(in *api.Pod, out *Pod, s conversion.Scope) error 
 func Convert_v1_Pod_To_api_Pod(in *Pod, out *api.Pod, s conversion.Scope) error {
 	// If there is a beta annotation, copy to alpha key.
 	// See commit log for PR #31026 for why we do this.
+	fmt.Println("@@@@3")
 	if valueBeta, okBeta := in.Annotations[PodInitContainersBetaAnnotationKey]; okBeta {
 		in.Annotations[PodInitContainersAnnotationKey] = valueBeta
 	}

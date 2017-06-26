@@ -631,6 +631,7 @@ func patchResource(
 	// and is given the currently persisted object as input.
 	applyPatch := func(_ request.Context, _, currentObject runtime.Object) (runtime.Object, error) {
 		// Make sure we actually have a persisted currentObject
+		fmt.Println("@@@@1")
 		if hasUID, err := hasUID(currentObject); err != nil {
 			return nil, err
 		} else if !hasUID {
@@ -701,12 +702,14 @@ func patchResource(
 				if err := strategicPatchObject(codec, defaulter, currentVersionedObject, patchJS, versionedObjToUpdate, versionedObj); err != nil {
 					return nil, err
 				}
+				fmt.Println("@@@@2")
 				// Convert the object back to unversioned.
 				gvk := kind.GroupKind().WithVersion(runtime.APIVersionInternal)
 				unversionedObjToUpdate, err := unsafeConvertor.ConvertToVersion(versionedObjToUpdate, gvk.GroupVersion())
 				if err != nil {
 					return nil, err
 				}
+				fmt.Println("@@@4")
 				objToUpdate = unversionedObjToUpdate
 				// Store unstructured representation for possible retries.
 				originalObjMap = originalMap
@@ -801,12 +804,14 @@ func patchResource(
 			if err := applyPatchToObject(codec, defaulter, currentObjMap, originalPatchMap, versionedObjToUpdate, versionedObj); err != nil {
 				return nil, err
 			}
+			fmt.Println("@@@@2")
 			// Convert the object back to unversioned.
 			gvk := kind.GroupKind().WithVersion(runtime.APIVersionInternal)
 			objToUpdate, err := unsafeConvertor.ConvertToVersion(versionedObjToUpdate, gvk.GroupVersion())
 			if err != nil {
 				return nil, err
 			}
+			fmt.Println("@@@@4")
 
 			return objToUpdate, nil
 		}

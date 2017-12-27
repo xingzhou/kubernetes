@@ -45,6 +45,9 @@ const (
 	mountCmd   = "mount"
 	unmountCmd = "unmount"
 
+	expandVolumeDeviceCmd = "expandvolumedevice"
+	requiresFSResizeCmd = "requiresfsresize"
+
 	// Option keys
 	optionFSType         = "kubernetes.io/fsType"
 	optionReadWrite      = "kubernetes.io/readwrite"
@@ -113,6 +116,7 @@ func (dc *DriverCall) AppendSpec(spec *volume.Spec, host volume.VolumeHost, extr
 }
 
 func (dc *DriverCall) Run() (*DriverStatus, error) {
+	glog.Errorf(fmt.Sprintf("dongdong qiang %#v", dc.args))
 	if dc.plugin.isUnsupported(dc.Command) {
 		return nil, errors.New(StatusNotSupported)
 	}
@@ -200,19 +204,23 @@ type DriverStatus struct {
 	// Represents volume is attached on the node
 	Attached bool `json:"attached,omitempty"`
 	// Returns capabilities of the driver.
-	// By default we assume all the capabilities are supported.
+	// By default, except for expand volume, we assume all other capabilities are supported.
 	// If the plugin does not support a capability, it can return false for that capability.
 	Capabilities *DriverCapabilities `json:",omitempty"`
+
+	RequiresFSResize bool `json:"requiresFSResize,omitempty"`
 }
 
 type DriverCapabilities struct {
 	Attach         bool `json:"attach"`
+	Expand         bool `json:"expand"`
 	SELinuxRelabel bool `json:"selinuxRelabel"`
 }
 
 func defaultCapabilities() *DriverCapabilities {
 	return &DriverCapabilities{
 		Attach:         true,
+		Expand:			false,
 		SELinuxRelabel: true,
 	}
 }

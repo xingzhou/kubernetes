@@ -161,5 +161,9 @@ func (pvcr *persistentVolumeClaimResize) checkVolumePlugin(pv *api.PersistentVol
 		return true
 	}
 
+	if pv.Spec.FlexVolume != nil {
+		return true
+	}
+
 	return false
 }

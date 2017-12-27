@@ -578,7 +578,7 @@ func (og *operationGenerator) resizeFileSystem(volumeToMount VolumeToMount, devi
 				Exec:      og.volumePluginMgr.Host.GetExec(expandableVolumePlugin.GetPluginName()),
 			}
 
-			resizer := resizefs.NewResizeFs(diskFormatter)
+					resizer := resizefs.NewResizeFs(diskFormatter)
 			resizeStatus, resizeErr := resizer.Resize(devicePath)
 
 			if resizeErr != nil {
@@ -1166,6 +1166,10 @@ func (og *operationGenerator) GenerateExpandVolumeFunc(
 
 	if err != nil {
 		return nil, "", fmt.Errorf("Error finding plugin for expanding volume: %q with error %v", pvcWithResizeRequest.QualifiedName(), err)
+	}
+
+	if volumePlugin == nil {
+		return nil, "", fmt.Errorf("Error finding an expandable plugin for expanding volume: %q", pvcWithResizeRequest.QualifiedName())
 	}
 
 	expandFunc := func() error {

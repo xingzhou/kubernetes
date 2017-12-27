@@ -25,6 +25,7 @@ import (
 	"github.com/golang/glog"
 
 	api "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/util/mount"
 	utilstrings "k8s.io/kubernetes/pkg/util/strings"
@@ -53,7 +54,18 @@ type flexVolumeAttachablePlugin struct {
 	*flexVolumePlugin
 }
 
+type flexVolumeExpandablePlugin struct {
+	*flexVolumePlugin
+}
+
+type flexVolumeAttachableAndExpandablePlugin struct {
+	*flexVolumePlugin
+	*flexVolumeAttachablePlugin
+	*flexVolumeExpandablePlugin
+}
+
 var _ volume.AttachableVolumePlugin = &flexVolumeAttachablePlugin{}
+var _ volume.ExpandableVolumePlugin = &flexVolumeExpandablePlugin{}
 var _ volume.PersistentVolumePlugin = &flexVolumePlugin{}
 
 type PluginFactory interface {
@@ -82,12 +94,27 @@ func (pluginFactory) NewFlexVolumePlugin(pluginDir, name string) (volume.VolumeP
 	}
 	flexPlugin.capabilities = *ds.Capabilities
 
+	attachablePlugin := flexVolumeAttachablePlugin{flexVolumePlugin: flexPlugin}
+	expandablePlugin := flexVolumeExpandablePlugin{flexVolumePlugin: flexPlugin}
+
+	if flexPlugin.capabilities.Attach && flexPlugin.capabilities.Expand {
+		return &flexVolumeAttachableAndExpandablePlugin{
+			flexVolumePlugin:           flexPlugin,
+			flexVolumeAttachablePlugin: &attachablePlugin,
+			flexVolumeExpandablePlugin: &expandablePlugin,
+		}, nil
+	}
+
 	if flexPlugin.capabilities.Attach {
 		// Plugin supports attach/detach, so return flexVolumeAttachablePlugin
-		return &flexVolumeAttachablePlugin{flexVolumePlugin: flexPlugin}, nil
-	} else {
-		return flexPlugin, nil
+		return &attachablePlugin, nil
 	}
+
+	if flexPlugin.capabilities.Expand {
+		return &expandablePlugin, nil
+	}
+
+	return flexPlugin, nil
 }
 
 // Init is part of the volume.VolumePlugin interface.
@@ -203,6 +230,27 @@ func (plugin *flexVolumeAttachablePlugin) NewAttacher() (volume.Attacher, error)
 // NewDetacher is part of the volume.AttachableVolumePlugin interface.
 func (plugin *flexVolumeAttachablePlugin) NewDetacher() (volume.Detacher, error) {
 	return &flexVolumeDetacher{plugin}, nil
+}
+
+func (plugin *flexVolumeExpandablePlugin) ExpandVolumeDevice(spec *volume.Spec, newSize resource.Quantity, oldSize resource.Quantity) (resource.Quantity, error) {
+	call := plugin.NewDriverCall(expandVolumeDeviceCmd)
+	call.Append(newSize.String())
+	call.Append(oldSize.String())
+	call.AppendSpec(spec, plugin.host, nil)
+
+	_, err := call.Run()
+	return newSize, err
+}
+
+func (plugin *flexVolumeExpandablePlugin) RequiresFSResize() bool {
+	call := plugin.NewDriverCall(requiresFSResizeCmd)
+
+	ds, err := call.Run()
+	if isCmdNotSupportedErr(err) {
+		return false
+	}
+
+	return ds.RequiresFSResize
 }
 
 // ConstructVolumeSpec is part of the volume.AttachableVolumePlugin interface.
